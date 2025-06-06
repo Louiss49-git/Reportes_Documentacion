@@ -325,10 +325,9 @@ namespace Reportes
  
 
  
+<img src="img/Diseño.png">
 
 
-
- ![Factura](C:/Usuarios/ferdo/Desktop/Diseño.png)  ← Esto solo sirve en tu PC
 
 
 
