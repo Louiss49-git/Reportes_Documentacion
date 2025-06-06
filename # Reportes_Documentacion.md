@@ -326,11 +326,9 @@ namespace Reportes
 
  
 
-Diseño del Form
- 
 
 
-
+ ![Diseño del Form](img/Diseño.png)
 
 
 
