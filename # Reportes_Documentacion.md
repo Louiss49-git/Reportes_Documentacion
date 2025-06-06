@@ -9,29 +9,319 @@ Tarea realizada en:
 Visual Studio 2022 Y
 Visual Studio Code
 
+Código C# 
+ using System;
+using System.Collections.Generic;
+using System.Data;
+using System.Drawing;
+using System.Drawing.Printing;
+using System.Windows.Forms;
+using MySql.Data.MySqlClient;
+using System.Drawing.Printing;
+using Microsoft.ReportingServices.ReportProcessing.OnDemandReportObjectModel;
+using System.IO;
+using iTextSharp.text;
+using iTextSharp.text.pdf;
 
+namespace Reportes
+{
+    public partial class Form1 : Form
+    {
+        string connectionString = "Server=localhost;Database=BD_FacturacionPruebas;Uid=root;Pwd=ferdo1231973;Port=3305;";
+        private Dictionary<TextBox, string> placeholders = new Dictionary<TextBox, string>();
 
+        public Form1()
+        {
+            InitializeComponent();
+            CargarDatos();
+            InicializarPlaceholders();
+            AsignarEventosKeyPress();
+            LimpiarCampos();
+        }
 
+        private void InicializarPlaceholders()
+        {
+            placeholders[txtDescripcion] = "Descripción";
+            placeholders[txtCategoria] = "Categoría";
+            placeholders[txtCantidad] = "Cantidad";
+            placeholders[txtPrecioUnitario] = "Precio Unitario";
+            placeholders[txtITEBIS] = "ITEBIS";
+            placeholders[txtDescuento] = "Descuento";
+            placeholders[txtTotalGeneral] = "Total General";
 
+            foreach (var pair in placeholders)
+            {
+                SetPlaceholder(pair.Key, pair.Value);
+                pair.Key.GotFocus += (s, e) => RemovePlaceholder((TextBox)s, placeholders[(TextBox)s]);
+                pair.Key.LostFocus += (s, e) => SetPlaceholder((TextBox)s, placeholders[(TextBox)s]);
+            }
+        }
 
+        private void SetPlaceholder(TextBox textBox, string placeholder)
+        {
+            if (string.IsNullOrWhiteSpace(textBox.Text))
+            {
+                textBox.Text = placeholder;
+                textBox.ForeColor = Color.Gray;
+            }
+        }
 
+        private void RemovePlaceholder(TextBox textBox, string placeholder)
+        {
+            if (textBox.Text == placeholder)
+            {
+                textBox.Text = "";
+                textBox.ForeColor = Color.Black;
+            }
+        }
 
+        private void AsignarEventosKeyPress()
+        {
+            txtCantidad.KeyPress += ValidarSoloNumerosEnteros;
+            txtPrecioUnitario.KeyPress += ValidarSoloDecimales;
+            txtITEBIS.KeyPress += ValidarSoloDecimales;
+            txtDescuento.KeyPress += ValidarSoloDecimales;
+            txtTotalGeneral.KeyPress += ValidarSoloDecimales;
+        }
 
-Código C#
- 
+        private void ValidarSoloNumerosEnteros(object sender, KeyPressEventArgs e)
+        {
+            if (!char.IsControl(e.KeyChar) && !char.IsDigit(e.KeyChar))
+                e.Handled = true;
+        }
 
- 
+        private void ValidarSoloDecimales(object sender, KeyPressEventArgs e)
+        {
+            TextBox txt = sender as TextBox;
+            if (!char.IsControl(e.KeyChar) && !char.IsDigit(e.KeyChar) && e.KeyChar != '.')
+                e.Handled = true;
 
- 
+            if (e.KeyChar == '.' && txt.Text.Contains("."))
+                e.Handled = true;
+        }
 
- 
+        private bool ValidarCampos()
+        {
+            foreach (var pair in placeholders)
+            {
+                if (string.IsNullOrWhiteSpace(pair.Key.Text) || pair.Key.Text == pair.Value)
+                {
+                    MessageBox.Show("Todos los campos deben estar llenos con datos válidos.");
+                    return false;
+                }
+            }
 
- 
+            if (!int.TryParse(txtCantidad.Text, out _) ||
+                !decimal.TryParse(txtPrecioUnitario.Text, out _) ||
+                !decimal.TryParse(txtITEBIS.Text, out _) ||
+                !decimal.TryParse(txtDescuento.Text, out _) ||
+                !decimal.TryParse(txtTotalGeneral.Text, out _))
+            {
+                MessageBox.Show("Los valores deben ser numéricos válidos.");
+                return false;
+            }
 
- 
+            return true;
+        }
 
- 
+        private void LimpiarCampos()
+        {
+            foreach (var pair in placeholders)
+            {
+                pair.Key.Text = "";
+                SetPlaceholder(pair.Key, pair.Value);
+            }
+        }
 
+        private void CargarDatos()
+        {
+            using (MySqlConnection conn = new MySqlConnection(connectionString))
+            {
+                string query = "SELECT * FROM facturas";
+                MySqlDataAdapter adapter = new MySqlDataAdapter(query, conn);
+                DataTable dt = new DataTable();
+                adapter.Fill(dt);
+                dataGridView1.DataSource = dt;
+            }
+        }
+
+        private int ObtenerIDSeleccionado()
+        {
+            if (dataGridView1.CurrentRow != null)
+                return Convert.ToInt32(dataGridView1.CurrentRow.Cells["ID"].Value);
+            return -1;
+        }
+
+        private void btnInsertar_Click(object sender, EventArgs e)
+        {
+            if (!ValidarCampos()) return;
+
+            using (MySqlConnection conn = new MySqlConnection(connectionString))
+            {
+                string query = "INSERT INTO facturas (DESCRIPCIÓN, CATEGORÍA, CANTIDAD, PRECIO_UNITARIO, ITEBIS, DESCUENTO, TOTAL_GENERAL) " +
+                               "VALUES (@desc, @cat, @cant, @precio, @itebis, @descue, @total)";
+                MySqlCommand cmd = new MySqlCommand(query, conn);
+                cmd.Parameters.AddWithValue("@desc", txtDescripcion.Text);
+                cmd.Parameters.AddWithValue("@cat", txtCategoria.Text);
+                cmd.Parameters.AddWithValue("@cant", int.Parse(txtCantidad.Text));
+                cmd.Parameters.AddWithValue("@precio", decimal.Parse(txtPrecioUnitario.Text));
+                cmd.Parameters.AddWithValue("@itebis", decimal.Parse(txtITEBIS.Text));
+                cmd.Parameters.AddWithValue("@descue", decimal.Parse(txtDescuento.Text));
+                cmd.Parameters.AddWithValue("@total", decimal.Parse(txtTotalGeneral.Text));
+
+                conn.Open();
+                cmd.ExecuteNonQuery();
+                MessageBox.Show("Registro insertado.");
+                CargarDatos();
+                LimpiarCampos();
+            }
+        }
+
+        private void btnActualizar_Click(object sender, EventArgs e)
+        {
+            int id = ObtenerIDSeleccionado();
+            if (id == -1)
+            {
+                MessageBox.Show("Selecciona un registro para actualizar.");
+                return;
+            }
+
+            if (!ValidarCampos()) return;
+
+            using (MySqlConnection conn = new MySqlConnection(connectionString))
+            {
+                string query = "UPDATE facturas SET DESCRIPCIÓN=@desc, CATEGORÍA=@cat, CANTIDAD=@cant, " +
+                               "PRECIO_UNITARIO=@precio, ITEBIS=@itebis, DESCUENTO=@descue, TOTAL_GENERAL=@total " +
+                               "WHERE ID=@id";
+                MySqlCommand cmd = new MySqlCommand(query, conn);
+                cmd.Parameters.AddWithValue("@desc", txtDescripcion.Text);
+                cmd.Parameters.AddWithValue("@cat", txtCategoria.Text);
+                cmd.Parameters.AddWithValue("@cant", int.Parse(txtCantidad.Text));
+                cmd.Parameters.AddWithValue("@precio", decimal.Parse(txtPrecioUnitario.Text));
+                cmd.Parameters.AddWithValue("@itebis", decimal.Parse(txtITEBIS.Text));
+                cmd.Parameters.AddWithValue("@descue", decimal.Parse(txtDescuento.Text));
+                cmd.Parameters.AddWithValue("@total", decimal.Parse(txtTotalGeneral.Text));
+                cmd.Parameters.AddWithValue("@id", id);
+
+                conn.Open();
+                cmd.ExecuteNonQuery();
+                MessageBox.Show("Registro actualizado.");
+                CargarDatos();
+                LimpiarCampos();
+            }
+        }
+
+        private void btnEliminar_Click(object sender, EventArgs e)
+        {
+            int id = ObtenerIDSeleccionado();
+            if (id == -1)
+            {
+                MessageBox.Show("Selecciona un registro para eliminar.");
+                return;
+            }
+
+            using (MySqlConnection conn = new MySqlConnection(connectionString))
+            {
+                string query = "DELETE FROM facturas WHERE ID=@id";
+                MySqlCommand cmd = new MySqlCommand(query, conn);
+                cmd.Parameters.AddWithValue("@id", id);
+
+                conn.Open();
+                cmd.ExecuteNonQuery();
+                MessageBox.Show("Registro eliminado.");
+                CargarDatos();
+                LimpiarCampos();
+            }
+        }
+
+        private void btnNuevo_Click(object sender, EventArgs e)
+        {
+            LimpiarCampos();
+        }
+
+        private void dataGridView1_CellContentClick(object sender, DataGridViewCellEventArgs e)
+        {
+            if (dataGridView1.CurrentRow != null)
+            {
+                txtDescripcion.Text = dataGridView1.CurrentRow.Cells["DESCRIPCIÓN"].Value.ToString();
+                txtDescripcion.ForeColor = Color.Black;
+                txtCategoria.Text = dataGridView1.CurrentRow.Cells["CATEGORÍA"].Value.ToString();
+                txtCategoria.ForeColor = Color.Black;
+                txtCantidad.Text = dataGridView1.CurrentRow.Cells["CANTIDAD"].Value.ToString();
+                txtCantidad.ForeColor = Color.Black;
+                txtPrecioUnitario.Text = dataGridView1.CurrentRow.Cells["PRECIO_UNITARIO"].Value.ToString();
+                txtPrecioUnitario.ForeColor = Color.Black;
+                txtITEBIS.Text = dataGridView1.CurrentRow.Cells["ITEBIS"].Value.ToString();
+                txtITEBIS.ForeColor = Color.Black;
+                txtDescuento.Text = dataGridView1.CurrentRow.Cells["DESCUENTO"].Value.ToString();
+                txtDescuento.ForeColor = Color.Black;
+                txtTotalGeneral.Text = dataGridView1.CurrentRow.Cells["TOTAL_GENERAL"].Value.ToString();
+                txtTotalGeneral.ForeColor = Color.Black;
+            }
+        }
+
+        private void btnExportarPDF_Click(object sender, EventArgs e)
+        {
+            if (dataGridView1.Rows.Count > 0)
+            {
+                SaveFileDialog saveFile = new SaveFileDialog();
+                saveFile.Filter = "PDF file (*.pdf)|*.pdf";
+                saveFile.FileName = "Facturas.pdf";
+
+                if (saveFile.ShowDialog() == DialogResult.OK)
+                {
+                    try
+                    {
+                        Document doc = new Document(PageSize.A4, 10f, 10f, 20f, 20f);
+                        PdfWriter.GetInstance(doc, new FileStream(saveFile.FileName, FileMode.Create));
+                        doc.Open();
+
+                        iTextSharp.text.Paragraph title = new iTextSharp.text.Paragraph("REPORTE DE FACTURAS\n\n", FontFactory.GetFont("Arial", 16));
+                        title.Alignment = Element.ALIGN_CENTER;
+                        doc.Add(title);
+
+                        PdfPTable pdfTable = new PdfPTable(dataGridView1.Columns.Count);
+                        pdfTable.WidthPercentage = 100;
+
+                        // Agregar encabezados
+                        foreach (DataGridViewColumn column in dataGridView1.Columns)
+                        {
+                            PdfPCell cell = new PdfPCell(new Phrase(column.HeaderText));
+                            cell.BackgroundColor = new BaseColor(240, 240, 240);
+                            pdfTable.AddCell(cell);
+                        }
+
+                        // Agregar filas
+                        foreach (DataGridViewRow row in dataGridView1.Rows)
+                        {
+                            if (!row.IsNewRow)
+                            {
+                                foreach (DataGridViewCell cell in row.Cells)
+                                {
+                                    pdfTable.AddCell(cell.Value?.ToString() ?? "");
+                                }
+                            }
+                        }
+
+                        doc.Add(pdfTable);
+                        doc.Close();
+
+                        MessageBox.Show("PDF exportado correctamente.", "Éxito", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    }
+                    catch (Exception ex)
+                    {
+                        MessageBox.Show("Error al exportar PDF: " + ex.Message);
+                    }
+                }
+            }
+            else
+            {
+                MessageBox.Show("No hay datos para exportar.", "Advertencia", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
+        }
+
+    }
+}
  
 
  
