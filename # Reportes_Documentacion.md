@@ -324,8 +324,12 @@ namespace Reportes
 }
  
 
+
+
  
-<img src="img/Diseño.png">
+<img src="img/Diseño.png" width="400">
+
+
 
 
 
